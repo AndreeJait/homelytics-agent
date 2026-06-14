@@ -9,14 +9,15 @@ import (
 )
 
 type agentStatusUseCase struct {
-	serviceName    string
-	store          portOutbound.SessionStore
-	runtime        portOutbound.ContainerRuntime
+	serviceName string
+	store       portOutbound.SessionStore
+	runtime     portOutbound.ContainerRuntime
+	vpn         portOutbound.VPN
 }
 
 // NewAgentStatusUseCase creates a use case that aggregates overall agent status.
-func NewAgentStatusUseCase(serviceName string, store portOutbound.SessionStore, runtime portOutbound.ContainerRuntime) portInbound.UseCase {
-	return &agentStatusUseCase{serviceName: serviceName, store: store, runtime: runtime}
+func NewAgentStatusUseCase(serviceName string, store portOutbound.SessionStore, runtime portOutbound.ContainerRuntime, vpn portOutbound.VPN) portInbound.UseCase {
+	return &agentStatusUseCase{serviceName: serviceName, store: store, runtime: runtime, vpn: vpn}
 }
 
 // Get returns the current agent status.
@@ -29,6 +30,10 @@ func (u *agentStatusUseCase) Get(ctx context.Context) (*entity.AgentStatus, erro
 
 	if key, err := u.store.GetTSNetAuthKey(ctx); err == nil && key != nil {
 		status.TSNetAuthKeyPresent = true
+	}
+
+	if connected, err := u.vpn.Status(ctx); err == nil {
+		status.TSNetConnected = connected
 	}
 
 	if runtimeStatus, err := u.runtime.Status(ctx); err == nil && runtimeStatus != nil {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 
+	"github.com/AndreeJait/go-utility/v2/logw"
 	"github.com/AndreeJait/homelytics-agent/adapter/inbound/ipc"
 	"github.com/AndreeJait/homelytics-agent/config"
 	"go.uber.org/dig"
@@ -33,20 +34,29 @@ func (cc *CleanupCollector) Cleanup(ctx context.Context) error {
 func wire(cfg *config.AppConfig) (*ipc.Server, func(ctx context.Context) error, error) {
 	c := dig.New()
 
+	bgCtx, cancel := context.WithCancel(context.Background())
+	cc := &CleanupCollector{}
+	cc.Add(func(_ context.Context) error { cancel(); return nil })
+
 	c.Provide(func() *config.AppConfig { return cfg })
-	c.Provide(func() *CleanupCollector { return &CleanupCollector{} })
+	c.Provide(func() *CleanupCollector { return cc })
+	c.Provide(func() context.Context { return bgCtx })
 
 	provideInfrastructure(c)
 	provideServices(c)
 	provideIPC(c)
+	provideBackgroundTasks(c)
 
 	var server *ipc.Server
 	if err := c.Invoke(func(s *ipc.Server) { server = s }); err != nil {
 		return nil, nil, err
 	}
 
-	var cc *CleanupCollector
-	if err := c.Invoke(func(collector *CleanupCollector) { cc = collector }); err != nil {
+	if err := c.Invoke(func(ctx context.Context, loop *HeartbeatLoop, listener *TSNetCommandListener) {
+		loop.Start(ctx)
+		listener.Start(ctx)
+		logw.Infof("Background tasks started")
+	}); err != nil {
 		return nil, nil, err
 	}
 

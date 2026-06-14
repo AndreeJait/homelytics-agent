@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/AndreeJait/homelytics-agent/config"
 	"github.com/AndreeJait/homelytics-agent/domain/entity"
@@ -58,6 +59,26 @@ func main() {
 			fmt.Fprintf(os.Stderr, "unknown runtime subcommand: %s\n", args[0])
 			os.Exit(1)
 		}
+	case "workload":
+		if len(args) < 1 {
+			fmt.Fprintln(os.Stderr, "usage: homelytics-agent workload [run|list|status|stop|delete]")
+			os.Exit(1)
+		}
+		switch args[0] {
+		case "run":
+			workloadRun(globals, args[1:])
+		case "list":
+			workloadList(globals, args[1:])
+		case "status":
+			workloadStatus(globals, args[1:])
+		case "stop":
+			workloadStop(globals, args[1:])
+		case "delete":
+			workloadDelete(globals, args[1:])
+		default:
+			fmt.Fprintf(os.Stderr, "unknown workload subcommand: %s\n", args[0])
+			os.Exit(1)
+		}
 	case "status":
 		status(globals, args)
 	case "help", "--help", "-h":
@@ -103,11 +124,17 @@ Commands:
   login --email=<email> --password=<password>
   tsnet auth
   runtime status
+  workload run --image=<image> [--id=<id>] [--port=<host>:<container>] [--host-network]
+  workload list
+  workload status --id=<id>
+  workload stop --id=<id>
+  workload delete --id=<id>
   status
 
 Examples:
   homelytics-agent --config /opt/homelytics/etc/config.yaml login --email merchant@example.com --password password
-  homelytics-agent --socket-path ./var/run/ipc.sock status`)
+  homelytics-agent --socket-path ./var/run/ipc.sock status
+  homelytics-agent workload run --image nginx:latest --port 8080:80 --host-network`)
 }
 
 func login(g globalOpts, args []string) {
@@ -156,6 +183,108 @@ func status(g globalOpts, args []string) {
 		os.Exit(1)
 	}
 	printResponse(resp)
+}
+
+func workloadRun(g globalOpts, args []string) {
+	fs := flag.NewFlagSet("workload run", flag.ExitOnError)
+	image := fs.String("image", "", "Container image reference")
+	id := fs.String("id", "", "Workload ID (generated if empty)")
+	hostNetwork := fs.Bool("host-network", true, "Run in host network namespace")
+	var ports portFlag
+	fs.Var(&ports, "port", "Port mapping host:container (repeatable)")
+	cli := buildClient(g, fs, args)
+
+	if *image == "" {
+		fmt.Fprintln(os.Stderr, "workload run requires --image")
+		os.Exit(1)
+	}
+
+	req := entity.RunWorkloadRequest{
+		ID:          *id,
+		Image:       *image,
+		Ports:       ports.mappings,
+		HostNetwork: *hostNetwork,
+	}
+	payload, _ := json.Marshal(req)
+	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "workload.run", Payload: payload})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "workload run failed: %v\n", err)
+		os.Exit(1)
+	}
+	printResponse(resp)
+}
+
+func workloadList(g globalOpts, args []string) {
+	fs := flag.NewFlagSet("workload list", flag.ExitOnError)
+	cli := buildClient(g, fs, args)
+	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "workload.list"})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "workload list failed: %v\n", err)
+		os.Exit(1)
+	}
+	printResponse(resp)
+}
+
+func workloadStatus(g globalOpts, args []string) {
+	fs := flag.NewFlagSet("workload status", flag.ExitOnError)
+	id := fs.String("id", "", "Workload ID")
+	cli := buildClient(g, fs, args)
+
+	payload, _ := json.Marshal(entity.WorkloadIDRequest{ID: *id})
+	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "workload.status", Payload: payload})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "workload status failed: %v\n", err)
+		os.Exit(1)
+	}
+	printResponse(resp)
+}
+
+func workloadStop(g globalOpts, args []string) {
+	fs := flag.NewFlagSet("workload stop", flag.ExitOnError)
+	id := fs.String("id", "", "Workload ID")
+	cli := buildClient(g, fs, args)
+
+	payload, _ := json.Marshal(entity.WorkloadIDRequest{ID: *id})
+	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "workload.stop", Payload: payload})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "workload stop failed: %v\n", err)
+		os.Exit(1)
+	}
+	printResponse(resp)
+}
+
+func workloadDelete(g globalOpts, args []string) {
+	fs := flag.NewFlagSet("workload delete", flag.ExitOnError)
+	id := fs.String("id", "", "Workload ID")
+	cli := buildClient(g, fs, args)
+
+	payload, _ := json.Marshal(entity.WorkloadIDRequest{ID: *id})
+	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "workload.delete", Payload: payload})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "workload delete failed: %v\n", err)
+		os.Exit(1)
+	}
+	printResponse(resp)
+}
+
+type portFlag struct {
+	mappings map[string]string
+}
+
+func (f *portFlag) String() string {
+	return ""
+}
+
+func (f *portFlag) Set(value string) error {
+	parts := strings.SplitN(value, ":", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("port mapping must be host:container, got %q", value)
+	}
+	if f.mappings == nil {
+		f.mappings = make(map[string]string)
+	}
+	f.mappings[parts[1]] = parts[0]
+	return nil
 }
 
 type ipcClient struct {

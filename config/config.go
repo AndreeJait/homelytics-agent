@@ -19,9 +19,9 @@ type AppConfig struct {
 	} `mapstructure:"app"`
 
 	HTTP struct {
-		Engine       string `mapstructure:"engine"`
-		EnableSwagger bool  `mapstructure:"enable_swagger"`
-		DebugMode    bool   `mapstructure:"debug_mode"`
+		Engine        string `mapstructure:"engine"`
+		EnableSwagger bool   `mapstructure:"enable_swagger"`
+		DebugMode     bool   `mapstructure:"debug_mode"`
 	} `mapstructure:"http"`
 
 	Log struct {
@@ -38,15 +38,15 @@ type AppConfig struct {
 		MaxOpenConns    int           `mapstructure:"max_open_conns"`
 		MaxIdleConns    int           `mapstructure:"max_idle_conns"`
 		ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`
-		DebugMode      bool          `mapstructure:"debug_mode"`
+		DebugMode       bool          `mapstructure:"debug_mode"`
 	} `mapstructure:"db"`
 
 	Redis struct {
-		Address  string `mapstructure:"address"`
-		Password string `mapstructure:"password"`
-		DB       int    `mapstructure:"db"`
-		PoolSize int    `mapstructure:"pool_size"`
-		DebugMode bool  `mapstructure:"debug_mode"`
+		Address   string `mapstructure:"address"`
+		Password  string `mapstructure:"password"`
+		DB        int    `mapstructure:"db"`
+		PoolSize  int    `mapstructure:"pool_size"`
+		DebugMode bool   `mapstructure:"debug_mode"`
 	} `mapstructure:"redis"`
 
 	Graceful struct {
@@ -65,15 +65,18 @@ type AppConfig struct {
 	} `mapstructure:"ipc"`
 
 	Homelytics struct {
-		MockMode bool   `mapstructure:"mock_mode"`
-		BaseURL  string `mapstructure:"base_url"`
+		MockMode           bool   `mapstructure:"mock_mode"`
+		BaseURL            string `mapstructure:"base_url"`
+		MockTSNetAuthKey   string `mapstructure:"mock_tsnet_auth_key"`
 	} `mapstructure:"homelytics"`
 
 	TSNet struct {
-		Hostname      string   `mapstructure:"hostname"`
-		ControlURL    string   `mapstructure:"control_url"`
-		AdvertiseTags []string `mapstructure:"advertise_tags"`
-		Dir           string   `mapstructure:"dir"`
+		Hostname              string   `mapstructure:"hostname"`
+		ControlURL            string   `mapstructure:"control_url"`
+		AdvertiseTags         []string `mapstructure:"advertise_tags"`
+		Dir                   string   `mapstructure:"dir"`
+		EnableCommandListener bool     `mapstructure:"enable_command_listener"`
+		CommandListenerAddr   string   `mapstructure:"command_listener_addr"`
 	} `mapstructure:"tsnet"`
 
 	Containerd struct {
@@ -81,6 +84,11 @@ type AppConfig struct {
 		Namespace string        `mapstructure:"namespace"`
 		Timeout   time.Duration `mapstructure:"timeout"`
 	} `mapstructure:"containerd"`
+
+	Heartbeat struct {
+		Enabled  bool          `mapstructure:"enabled"`
+		Interval time.Duration `mapstructure:"interval"`
+	} `mapstructure:"heartbeat"`
 }
 
 // Load reads the base config file at configPath, then merges app.local.yaml
@@ -147,6 +155,9 @@ func Load(configPath string) (*AppConfig, error) {
 	if cfg.TSNet.Hostname == "" {
 		cfg.TSNet.Hostname = "homelytics-agent"
 	}
+	if cfg.TSNet.CommandListenerAddr == "" {
+		cfg.TSNet.CommandListenerAddr = ":7373"
+	}
 	if cfg.Containerd.Address == "" {
 		cfg.Containerd.Address = "/run/containerd/containerd.sock"
 	}
@@ -155,6 +166,9 @@ func Load(configPath string) (*AppConfig, error) {
 	}
 	if cfg.Containerd.Timeout == 0 {
 		cfg.Containerd.Timeout = 10 * time.Second
+	}
+	if cfg.Heartbeat.Interval == 0 {
+		cfg.Heartbeat.Interval = 30 * time.Second
 	}
 
 	return cfg, nil

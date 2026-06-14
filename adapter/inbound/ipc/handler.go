@@ -16,19 +16,36 @@ import (
 	runtimeUC "github.com/AndreeJait/homelytics-agent/port/inbound/runtime"
 	statusUC "github.com/AndreeJait/homelytics-agent/port/inbound/status"
 	tsnetUC "github.com/AndreeJait/homelytics-agent/port/inbound/tsnet"
+	workloadUC "github.com/AndreeJait/homelytics-agent/port/inbound/workload"
 )
 
 // Server listens on a Unix domain socket and routes JSON command requests.
 type Server struct {
-	listener     net.Listener
-	authUC       authUC.UseCase
-	tsnetAuthUC  tsnetUC.UseCase
-	runtimeUC    runtimeUC.UseCase
-	statusUC     statusUC.UseCase
+	listener        net.Listener
+	authUC          authUC.UseCase
+	tsnetAuthUC     tsnetUC.UseCase
+	runtimeUC       runtimeUC.UseCase
+	statusUC        statusUC.UseCase
+	workloadRunUC   workloadUC.RunUseCase
+	workloadStopUC  workloadUC.StopUseCase
+	workloadDelUC   workloadUC.DeleteUseCase
+	workloadListUC  workloadUC.ListUseCase
+	workloadStatUC  workloadUC.StatusUseCase
 }
 
 // NewServer creates an IPC server bound to the given socket path.
-func NewServer(socketPath string, authUC authUC.UseCase, tsnetAuthUC tsnetUC.UseCase, runtimeUC runtimeUC.UseCase, statusUC statusUC.UseCase) (*Server, error) {
+func NewServer(
+	socketPath string,
+	authUC authUC.UseCase,
+	tsnetAuthUC tsnetUC.UseCase,
+	runtimeUC runtimeUC.UseCase,
+	statusUC statusUC.UseCase,
+	workloadRunUC workloadUC.RunUseCase,
+	workloadStopUC workloadUC.StopUseCase,
+	workloadDelUC workloadUC.DeleteUseCase,
+	workloadListUC workloadUC.ListUseCase,
+	workloadStatUC workloadUC.StatusUseCase,
+) (*Server, error) {
 	if err := os.RemoveAll(socketPath); err != nil {
 		return nil, fmt.Errorf("ipc: remove stale socket: %w", err)
 	}
@@ -48,11 +65,16 @@ func NewServer(socketPath string, authUC authUC.UseCase, tsnetAuthUC tsnetUC.Use
 	}
 
 	return &Server{
-		listener:    listener,
-		authUC:      authUC,
-		tsnetAuthUC: tsnetAuthUC,
-		runtimeUC:   runtimeUC,
-		statusUC:    statusUC,
+		listener:       listener,
+		authUC:         authUC,
+		tsnetAuthUC:    tsnetAuthUC,
+		runtimeUC:      runtimeUC,
+		statusUC:       statusUC,
+		workloadRunUC:  workloadRunUC,
+		workloadStopUC: workloadStopUC,
+		workloadDelUC:  workloadDelUC,
+		workloadListUC: workloadListUC,
+		workloadStatUC: workloadStatUC,
 	}, nil
 }
 
@@ -118,6 +140,16 @@ func (s *Server) route(ctx context.Context, req entity.CommandRequest) (*entity.
 		return s.handleRuntimeStatus(ctx, req)
 	case "status":
 		return s.handleStatus(ctx, req)
+	case "workload.run":
+		return s.handleWorkloadRun(ctx, req)
+	case "workload.stop":
+		return s.handleWorkloadStop(ctx, req)
+	case "workload.delete":
+		return s.handleWorkloadDelete(ctx, req)
+	case "workload.list":
+		return s.handleWorkloadList(ctx, req)
+	case "workload.status":
+		return s.handleWorkloadStatus(ctx, req)
 	default:
 		return nil, statusw.InvalidReqParam.WithCustomMessage("unknown method: " + req.Method)
 	}
@@ -164,6 +196,71 @@ func (s *Server) handleStatus(ctx context.Context, req entity.CommandRequest) (*
 	return s.encodeData(req.ID, status)
 }
 
+func (s *Server) handleWorkloadRun(ctx context.Context, req entity.CommandRequest) (*entity.CommandResponse, error) {
+	var payload entity.RunWorkloadRequest
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		return nil, statusw.InvalidReqParam.WithCustomMessage("invalid workload.run payload")
+	}
+
+	workload, err := s.workloadRunUC.Run(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.encodeData(req.ID, workload)
+}
+
+func (s *Server) handleWorkloadStop(ctx context.Context, req entity.CommandRequest) (*entity.CommandResponse, error) {
+	var payload entity.WorkloadIDRequest
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		return nil, statusw.InvalidReqParam.WithCustomMessage("invalid workload.stop payload")
+	}
+
+	workload, err := s.workloadStopUC.Stop(ctx, payload.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.encodeData(req.ID, workload)
+}
+
+func (s *Server) handleWorkloadDelete(ctx context.Context, req entity.CommandRequest) (*entity.CommandResponse, error) {
+	var payload entity.WorkloadIDRequest
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		return nil, statusw.InvalidReqParam.WithCustomMessage("invalid workload.delete payload")
+	}
+
+	workload, err := s.workloadDelUC.Delete(ctx, payload.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.encodeData(req.ID, workload)
+}
+
+func (s *Server) handleWorkloadList(ctx context.Context, req entity.CommandRequest) (*entity.CommandResponse, error) {
+	list, err := s.workloadListUC.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.encodeData(req.ID, list)
+}
+
+func (s *Server) handleWorkloadStatus(ctx context.Context, req entity.CommandRequest) (*entity.CommandResponse, error) {
+	var payload entity.WorkloadIDRequest
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		return nil, statusw.InvalidReqParam.WithCustomMessage("invalid workload.status payload")
+	}
+
+	workload, err := s.workloadStatUC.Status(ctx, payload.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.encodeData(req.ID, workload)
+}
+
 func (s *Server) encodeData(id string, data any) (*entity.CommandResponse, error) {
 	raw, err := json.Marshal(data)
 	if err != nil {
@@ -181,8 +278,8 @@ func (s *Server) encodeError(conn net.Conn, id string, err error) error {
 	}
 
 	resp := entity.CommandResponse{
-		ID:  id,
-		OK:  false,
+		ID:    id,
+		OK:    false,
 		Error: &entity.ErrorDetail{Code: code, Message: message},
 	}
 

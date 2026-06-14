@@ -14,3 +14,15 @@
 #   socket_path: ./var/run/ipc.sock
 # containerd:
 #   address: /run/containerd/containerd.sock
+#
+# Tailscale auth key fallback when TAILSCALE_TAILNET/API_KEY are not set:
+# homelytics:
+#   mock_tsnet_auth_key: "tskey-auth-xxxxxxxxxxxx"
+#
+# Backend trigger settings:
+# heartbeat:
+#   enabled: true
+#   interval: 30s
+# tsnet:
+#   enable_command_listener: true
+#   command_listener_addr: ":7373"

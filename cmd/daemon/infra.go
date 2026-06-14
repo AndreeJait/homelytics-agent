@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/AndreeJait/go-utility/v2/logw"
 	"github.com/AndreeJait/homelytics-agent/adapter/outbound"
@@ -41,7 +42,7 @@ func newVPN(cfg *config.AppConfig, cc *CleanupCollector) (portOutbound.VPN, erro
 
 func newHomelyticsBackend(cfg *config.AppConfig) portOutbound.HomelyticsBackend {
 	if cfg.Homelytics.MockMode {
-		return outbound.NewMockHomelyticsBackend()
+		return outbound.NewMockHomelyticsBackend(cfg)
 	}
 	return outbound.NewHTTPHomelyticsBackend(cfg)
 }
@@ -56,4 +57,32 @@ type unavailableContainerRuntime struct {
 
 func (r *unavailableContainerRuntime) Status(_ context.Context) (*entity.RuntimeStatus, error) {
 	return &entity.RuntimeStatus{Connected: false, Error: r.err.Error()}, nil
+}
+
+func (r *unavailableContainerRuntime) PullImage(_ context.Context, _ string) error {
+	return fmt.Errorf("containerd unavailable: %w", r.err)
+}
+
+func (r *unavailableContainerRuntime) CreateContainer(_ context.Context, _ entity.RunWorkloadRequest) (string, error) {
+	return "", fmt.Errorf("containerd unavailable: %w", r.err)
+}
+
+func (r *unavailableContainerRuntime) StartContainer(_ context.Context, _ string) error {
+	return fmt.Errorf("containerd unavailable: %w", r.err)
+}
+
+func (r *unavailableContainerRuntime) StopContainer(_ context.Context, _ string) error {
+	return fmt.Errorf("containerd unavailable: %w", r.err)
+}
+
+func (r *unavailableContainerRuntime) DeleteContainer(_ context.Context, _ string) error {
+	return fmt.Errorf("containerd unavailable: %w", r.err)
+}
+
+func (r *unavailableContainerRuntime) ListContainers(_ context.Context) ([]entity.Workload, error) {
+	return nil, fmt.Errorf("containerd unavailable: %w", r.err)
+}
+
+func (r *unavailableContainerRuntime) ContainerStatus(_ context.Context, _ string) (*entity.Workload, error) {
+	return nil, fmt.Errorf("containerd unavailable: %w", r.err)
 }

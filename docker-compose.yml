@@ -7,11 +7,19 @@ services:
       dockerfile: Dockerfile
     image: homelytics-agent:latest
     container_name: homelytics-agent
+    privileged: true
+    network_mode: host
     command: ["--config", "/opt/homelytics/etc/config.yaml"]
+    environment:
+      - TAILSCALE_TAILNET=${TAILSCALE_TAILNET}
+      - TAILSCALE_API_KEY=${TAILSCALE_API_KEY}
     volumes:
       - ./var/run:/opt/homelytics/run
       - ./files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro
       - ./files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - containerd-data:/opt/homelytics/lib/containerd
+      - containerd-run:/run/containerd
     restart: unless-stopped
 
   cli:
@@ -26,3 +34,7 @@ services:
       - ./var/run:/opt/homelytics/run
       - ./files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro
       - ./files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro
+
+volumes:
+  containerd-data:
+  containerd-run:

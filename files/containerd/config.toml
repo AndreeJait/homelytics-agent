@@ -1,0 +1,15 @@
+version = 2
+root = "/opt/homelytics/lib/containerd"
+state = "/run/containerd"
+plugin_dir = "/opt/homelytics/lib/containerd/plugins"
+
+[grpc]
+  address = "/run/containerd/containerd.sock"
+  uid = 0
+  gid = 0
+
+[debug]
+  level = "info"
+
+[metrics]
+  address = ""

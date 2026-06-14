@@ -21,17 +21,24 @@ ipc:
 homelytics:
   mock_mode: true
   base_url: https://api.homelytics.internal
+  mock_tsnet_auth_key: ""
 
 tsnet:
   hostname: homelytics-agent
   control_url: ""
   advertise_tags: []
   dir: ""
+  enable_command_listener: true
+  command_listener_addr: ":7373"
 
 containerd:
   address: /run/containerd/containerd.sock
   namespace: homelytics
   timeout: 10s
+
+heartbeat:
+  enabled: true
+  interval: 30s
 
 graceful:
   shutdown_timeout: 10s

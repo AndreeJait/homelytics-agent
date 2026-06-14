@@ -1,4 +1,4 @@
-.PHONY: build build-daemon build-cli run-daemon run-cli test tidy vet install ensure-tools migrate-new migrate-up migrate-down migrate-fresh docker-build docker-run docker-test docker-up docker-down docker-cli-compose
+.PHONY: build build-daemon build-cli run-daemon run-cli test tidy vet install ensure-tools migrate-new migrate-up migrate-down migrate-fresh docker-build docker-run docker-test docker-up docker-down docker-cli-compose docker-workload-run
 
 # Auto-install required CLI tools
 ensure-tools:
@@ -66,13 +66,22 @@ docker-cli-compose:
 docker-test:
 	make docker-build
 	make docker-up
-	sleep 2
+	sleep 5
 	docker compose run --rm --entrypoint "" cli \
 		homelytics-agent --config /opt/homelytics/etc/config.yaml login --email merchant@example.com --password password
 	docker compose run --rm --entrypoint "" cli \
 		homelytics-agent --config /opt/homelytics/etc/config.yaml tsnet auth
 	docker compose run --rm --entrypoint "" cli \
+		homelytics-agent --config /opt/homelytics/etc/config.yaml runtime status
+	docker compose run --rm --entrypoint "" cli \
 		homelytics-agent --config /opt/homelytics/etc/config.yaml status
+	docker compose run --rm --entrypoint "" cli \
+		homelytics-agent --config /opt/homelytics/etc/config.yaml workload run --image nginx:latest --port 8080:80 --host-network
+
+# Convenience target to run a workload command in the CLI container
+docker-workload-run:
+	docker compose run --rm --entrypoint "" cli \
+		homelytics-agent --config /opt/homelytics/etc/config.yaml workload run --image $(IMAGE) --port $(PORT) --host-network
 
 # Create a new migration: make migrate-new name=create_users_table
 migrate-new:

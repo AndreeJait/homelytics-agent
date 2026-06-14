@@ -82,6 +82,11 @@ Current methods:
 | `tsnet.auth` | - | `TSNetAuthKey` |
 | `runtime.status` | - | `RuntimeStatus` |
 | `status` | - | `AgentStatus` |
+| `workload.run` | `RunWorkloadRequest` | `Workload` |
+| `workload.stop` | `WorkloadIDRequest` | `Workload` |
+| `workload.delete` | `WorkloadIDRequest` | `Workload` |
+| `workload.list` | - | `WorkloadList` |
+| `workload.status` | `WorkloadIDRequest` | `Workload` |
 
 #### 3. Embedded Network Tunnel (`tsnet`)
 
@@ -161,28 +166,35 @@ export IPC_SOCKET_PATH=$PWD/var/run/ipc.sock
 
 ### Run with Docker (macOS / Linux)
 
+The Docker setup runs containerd inside a privileged container. For the Tailscale auth key to be real, export your credentials first.
+
 ```bash
+# Export Tailscale credentials so the mock backend can call the Tailscale API
+export TAILSCALE_TAILNET=your-tailnet.ts.net
+export TAILSCALE_API_KEY=tskey-api-xxxxxxxxxxxx
+
+# Optional: set a hardcoded auth key for offline testing
+# cp files/config/app.local.yaml.example files/config/app.local.yaml
+# Edit files/config/app.local.yaml and set homelytics.mock_tsnet_auth_key.
+
 # Build the image
 make docker-build
 
-# Optional: create a local override file
-# (the example below uses a local socket path so the CLI can reach it easily)
-cp files/config/app.local.yaml.example files/config/app.local.yaml
-# Then edit files/config/app.local.yaml as needed.
-
 # Run the daemon container
-make docker-run
+make docker-up
 
 # In another terminal, run CLI commands against the same socket directory
-make docker-cli ARGS="login --email merchant@example.com --password password"
-make docker-cli ARGS="tsnet auth"
-make docker-cli ARGS="status"
+make docker-cli-compose ARGS="login --email merchant@example.com --password password"
+make docker-cli-compose ARGS="tsnet auth"
+make docker-cli-compose ARGS="status"
+make docker-cli-compose ARGS="workload run --image nginx:latest --port 8080:80 --host-network"
+make docker-cli-compose ARGS="workload list"
 
 # Or run a self-contained test
 make docker-test
 ```
 
-The Dockerfile uses an Alpine runtime stage with containerd and runc installed. The daemon runs as a `homelytics` system user; `/opt/homelytics/run` is mounted from `./var/run` so the host CLI (or another container) can reach the IPC socket. If `files/config/app.local.yaml` exists, it is mounted into the container as `/opt/homelytics/etc/app.local.yaml` and merged on top of the base config.
+The Dockerfile uses an Alpine runtime stage with containerd and runc installed. The daemon entrypoint starts `containerd` in the background before launching `homelytics-daemon`. The container runs as `root` inside Docker so it can manage cgroups and namespaces. `/opt/homelytics/run` is mounted from `./var/run` so the host CLI (or another container) can reach the IPC socket. The daemon container uses `network_mode: host` so containers with `--host-network` are reachable on the Docker host's interfaces (Linux only; Docker Desktop on macOS does not support host networking).
 
 ### Install on a target machine
 
@@ -259,9 +271,11 @@ Environment variable overrides: `IPC_SOCKET_PATH`, `CONTAINERD_ADDRESS`, `TSNET_
 | `make tidy` | Clean up dependencies |
 | `make install` | Run the installer (requires root) |
 | `make docker-build` | Build the Docker image |
-| `make docker-run` | Run the daemon container in the foreground |
-| `make docker-cli ARGS="status"` | Run a one-off CLI command in a container |
-| `make docker-test` | Build image and run a self-contained login/status test |
+| `make docker-up` | Start the daemon container in the background |
+| `make docker-down` | Stop the daemon container |
+| `make docker-cli-compose ARGS="status"` | Run a one-off CLI command in a container |
+| `make docker-test` | Build image and run login/tsnet/workload test |
+| `make docker-workload-run IMAGE=nginx:latest PORT=8080:80` | Deploy a workload from a container |
 | `make migrate-new name=foo` | Create a new migration |
 | `make migrate-up` | Run pending migrations |
 | `make migrate-down` | Roll back last migration |
@@ -276,6 +290,11 @@ homelytics-agent login --email=<email> --password=<password>
 homelytics-agent tsnet auth
 homelytics-agent runtime status
 homelytics-agent status
+homelytics-agent workload run --image=<image> [--id=<id>] [--port=<host>:<container>] [--host-network]
+homelytics-agent workload list
+homelytics-agent workload status --id=<id>
+homelytics-agent workload stop --id=<id>
+homelytics-agent workload delete --id=<id>
 ```
 
 All client commands accept `--socket-path=<path>` to override the IPC socket location.
@@ -286,16 +305,195 @@ All client commands accept `--socket-path=<path>` to override the IPC socket loc
 
 Because the real `homelytics-be` control plane does not exist yet, the daemon ships with an in-memory mock backend enabled by default (`homelytics.mock_mode: true`):
 
-* **Login** succeeds for `merchant@example.com` / `password` and returns `mock-token-12345`.
-* **`tsnet.auth`** succeeds for that token and returns `tskey-auth-mock-abcde`.
+* **Login** succeeds for `merchant@example.com` / `password` and returns:
+
+```json
+{
+  "access_token": "mock-token-12345",
+  "refresh_token": "mock-token-12345",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "expires_at": "2026-06-15T00:00:00Z"
+}
+```
+
+* **`tsnet.auth`** succeeds for that access token. It first tries to call the real Tailscale API using `TAILSCALE_TAILNET` and `TAILSCALE_API_KEY` from the environment. If those variables are not set, it falls back to `homelytics.mock_tsnet_auth_key` when configured. Otherwise it returns:
+
+```json
+{
+  "auth_key": "tskey-auth-mock-abcde",
+  "expires_at": "2026-06-15T00:00:00Z"
+}
+```
 
 Set `homelytics.mock_mode: false` to wire the real HTTP backend stub, which currently returns an error until `homelytics-be` is implemented.
+
+## Real homelytics-be API contract (Phase 2)
+
+When `homelytics-be` is ready, the agent will switch from the mock adapter to a real HTTPS client. The contract is documented in `docs/homelytics-be-api.md`. Quick reference with example JSON:
+
+### Required endpoints for tsnet auth-key flow
+
+The agent needs exactly two backend calls to get online:
+
+1. `POST /v1/auth/login` — authenticate the merchant and obtain an access token.
+2. `GET /v1/agents/auth-key` — present the access token and receive a Tailscale auth key.
+
+```mermaid
+sequenceDiagram
+    participant CLI as homelytics-agent CLI
+    participant Daemon as homelytics-daemon
+    participant BE as homelytics-be
+
+    CLI->>+Daemon: login --email merchant@example.com --password password
+    Daemon->>+BE: POST /v1/auth/login
+    BE-->>-Daemon: access_token + refresh_token
+    Daemon->>BE: GET /v1/agents/auth-key
+    BE-->>-Daemon: tskey-auth-...
+    Daemon-->>-CLI: AuthSession + TSNetAuthKey
+```
+
+### `POST /v1/auth/login`
+
+**Request:**
+
+```json
+{
+  "email": "merchant@example.com",
+  "password": "password"
+}
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4=...",
+  "token_type": "Bearer",
+  "expires_in": 900
+}
+```
+
+### `POST /v1/auth/refresh`
+
+**Request:**
+
+```json
+{
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4=..."
+}
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "bmV3LXJlZnJlc2gtdG9rZW4=...",
+  "token_type": "Bearer",
+  "expires_in": 900
+}
+```
+
+### `GET /v1/agents/auth-key`
+
+**Headers:**
+
+```text
+Authorization: Bearer <access_token>
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "auth_key": "tskey-auth-abc123def456ghi789",
+  "expires_at": "2026-06-15T00:00:00Z"
+}
+```
+
+### `POST /v1/agents/heartbeat`
+
+**Headers:**
+
+```text
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**Request:**
+
+```json
+{
+  "agent_id": "agent-uuid-or-hostname",
+  "hostname": "homelytics-agent",
+  "tsnet_ip": "100.64.0.5",
+  "version": "v0.2.0",
+  "timestamp": "2026-06-14T12:00:00Z",
+  "runtime": {
+    "connected": true,
+    "version": "1.7.23",
+    "revision": ""
+  },
+  "workloads": []
+}
+```
+
+**Response `202 Accepted`:**
+
+```json
+{
+  "commands": []
+}
+```
+
+### Error response format
+
+```json
+{
+  "code": "INVALID_CREDENTIAL",
+  "message": "Invalid email or password"
+}
+```
+
+---
+
+## Backend Trigger Mechanism
+
+`homelytics-be` can drive the agent through two complementary paths:
+
+1. **Heartbeat polling** — the daemon sends a `POST /v1/agents/heartbeat` request on a configurable interval (default 30s). The backend replies with a list of commands to execute, such as `DEPLOY`, `STOP`, or `DELETE`.
+
+2. **tsnet push listener** — once the agent joins the tailnet, it starts an HTTP server on `tsnet.command_listener_addr` (default `:7373`). `homelytics-be` or any authorized tailnet device can POST a single command to `http://homelytics-agent:7373/v1/commands` for immediate execution.
+
+Both paths use the same command executor, so behavior is identical whether a command arrives via polling or push.
+
+Supported command types:
+
+| Type | Payload | Action |
+|------|---------|--------|
+| `DEPLOY` | `RunWorkloadRequest` | Pull image, create and start container |
+| `STOP` | `WorkloadIDRequest` | Stop a running container |
+| `DELETE` | `WorkloadIDRequest` | Stop and remove a container |
+
+The listener and heartbeat are enabled by default and can be toggled via config:
+
+```yaml
+heartbeat:
+  enabled: true
+  interval: 30s
+
+tsnet:
+  enable_command_listener: true
+  command_listener_addr: ":7373"
+```
 
 ---
 
 ## Current Status
 
-This repository contains the Phase 1 vertical slice: daemon skeleton, mocked control-plane auth, mocked tsnet auth-key retrieval, containerd/tsnet scaffolding, and the auto-installer. See `SystemDetail.md` for the full five-phase roadmap.
+This repository contains the Phase 2 vertical slice: daemon skeleton, mocked control-plane auth with real Tailscale API key provisioning, containerd workload execution, tsnet tailnet joining, heartbeat polling, tsnet push command listener, and the auto-installer. See `SystemDetail.md` for the full five-phase roadmap.
 
 ---
 
