@@ -1,0 +1,39 @@
+# Local config overrides
+files/config/app.local.yaml
+
+# Built binaries
+bin/
+build/
+
+# Generated vendor tree (re-downloaded inside Docker)
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+*.exe
+*.exe~
+*.test
+*.out
+*.prof
+
+# Claude Code
+.claude/
+
+# Git
+.git/
+.gitignore
+
+# Markdown/docs that are not needed at runtime
+README.md
+SystemDetail.md
+CLAUDE.md

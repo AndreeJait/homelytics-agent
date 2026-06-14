@@ -1,0 +1,37 @@
+app:
+  name: homelytics-agent
+  env: development
+  http_port: 8080
+
+log:
+  level: debug
+  format: JSON
+  write_to_file: false
+  file_path: ""
+
+daemon:
+  run_dir: /opt/homelytics/run
+  etc_dir: /opt/homelytics/etc
+  log_dir: /opt/homelytics/log
+  state_file: /opt/homelytics/etc/state.json
+
+ipc:
+  socket_path: /opt/homelytics/run/ipc.sock
+
+homelytics:
+  mock_mode: true
+  base_url: https://api.homelytics.internal
+
+tsnet:
+  hostname: homelytics-agent
+  control_url: ""
+  advertise_tags: []
+  dir: ""
+
+containerd:
+  address: /run/containerd/containerd.sock
+  namespace: homelytics
+  timeout: 10s
+
+graceful:
+  shutdown_timeout: 10s

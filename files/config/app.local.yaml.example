@@ -1,0 +1,16 @@
+# Local config overrides — copy this file to app.local.yaml and customize.
+# Values here override app.yaml. Environment variables override both.
+#
+# Example:
+# app:
+#   http_port: 9090
+# http:
+#   debug_mode: false
+#
+# For local development without /opt permissions:
+# daemon:
+#   run_dir: ./var/run
+# ipc:
+#   socket_path: ./var/run/ipc.sock
+# containerd:
+#   address: /run/containerd/containerd.sock
