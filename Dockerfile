@@ -26,8 +26,9 @@ WORKDIR /opt/homelytics
 RUN apk add --no-cache containerd runc ca-certificates curl iptables ip6tables
 
 # Create the dedicated system user and required directories.
-# Alpine busybox adduser: -S = system, -D = no password, -H = no home directory.
-RUN adduser -S -D -H -h /opt/homelytics homelytics \
+# Alpine busybox adduser: -S = system, -D = no password, -h = home directory.
+RUN addgroup -S homelytics \
+    && adduser -S -D -h /opt/homelytics -G homelytics homelytics \
     && mkdir -p /opt/homelytics/run /opt/homelytics/etc /opt/homelytics/log /opt/homelytics/lib/containerd \
     && chown -R homelytics:homelytics /opt/homelytics
 
