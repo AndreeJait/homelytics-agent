@@ -13,18 +13,27 @@ import (
 	"github.com/AndreeJait/homelytics-agent/domain/entity"
 )
 
+// globalOpts holds flags that may appear before or after the subcommand.
+type globalOpts struct {
+	configPath     string
+	socketOverride string
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
 	}
 
-	cmd := os.Args[1]
-	args := os.Args[2:]
+	globals, cmd, args := parseGlobalFlags(os.Args[1:])
+	if cmd == "" {
+		printUsage()
+		os.Exit(1)
+	}
 
 	switch cmd {
 	case "login":
-		login(args)
+		login(globals, args)
 	case "tsnet":
 		if len(args) < 1 {
 			fmt.Fprintln(os.Stderr, "usage: homelytics-agent tsnet auth")
@@ -32,7 +41,7 @@ func main() {
 		}
 		switch args[0] {
 		case "auth":
-			tsnetAuth(args[1:])
+			tsnetAuth(globals, args[1:])
 		default:
 			fmt.Fprintf(os.Stderr, "unknown tsnet subcommand: %s\n", args[0])
 			os.Exit(1)
@@ -44,13 +53,13 @@ func main() {
 		}
 		switch args[0] {
 		case "status":
-			runtimeStatus(args[1:])
+			runtimeStatus(globals, args[1:])
 		default:
 			fmt.Fprintf(os.Stderr, "unknown runtime subcommand: %s\n", args[0])
 			os.Exit(1)
 		}
 	case "status":
-		status(args)
+		status(globals, args)
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -60,8 +69,35 @@ func main() {
 	}
 }
 
+// parseGlobalFlags extracts global flags that may appear before the subcommand.
+// It returns the parsed globals, the subcommand name, and the remaining args.
+func parseGlobalFlags(args []string) (globalOpts, string, []string) {
+	var g globalOpts
+	fs := flag.NewFlagSet("global", flag.ContinueOnError)
+	fs.StringVar(&g.configPath, "config", "files/config/app.yaml", "Path to config file")
+	fs.StringVar(&g.socketOverride, "socket-path", "", "Override IPC socket path")
+	fs.Usage = printUsage
+
+	// Parse only global flags; stop at the first non-flag argument (the subcommand).
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "flag parse error: %v\n", err)
+		os.Exit(1)
+	}
+
+	remaining := fs.Args()
+	if len(remaining) == 0 {
+		return g, "", nil
+	}
+
+	return g, remaining[0], remaining[1:]
+}
+
 func printUsage() {
-	fmt.Println(`Usage: homelytics-agent <command> [options]
+	fmt.Println(`Usage: homelytics-agent [global flags] <command> [command flags]
+
+Global flags:
+  --config=<path>       Config file path (default files/config/app.yaml)
+  --socket-path=<path>  Override IPC socket path (default from config)
 
 Commands:
   login --email=<email> --password=<password>
@@ -69,16 +105,16 @@ Commands:
   runtime status
   status
 
-Global flags (for client commands):
-  --socket-path=<path>  Override IPC socket path (default from config).
-  --config=<path>       Config file path (default files/config/app.yaml).`)
+Examples:
+  homelytics-agent --config /opt/homelytics/etc/config.yaml login --email merchant@example.com --password password
+  homelytics-agent --socket-path ./var/run/ipc.sock status`)
 }
 
-func login(args []string) {
+func login(g globalOpts, args []string) {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
 	email := fs.String("email", "", "Merchant email")
 	password := fs.String("password", "", "Merchant password")
-	cli := parseClientFlags(fs, args)
+	cli := buildClient(g, fs, args)
 
 	payload, _ := json.Marshal(entity.LoginRequest{Email: *email, Password: *password})
 	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "login", Payload: payload})
@@ -89,9 +125,9 @@ func login(args []string) {
 	printResponse(resp)
 }
 
-func tsnetAuth(args []string) {
+func tsnetAuth(g globalOpts, args []string) {
 	fs := flag.NewFlagSet("tsnet auth", flag.ExitOnError)
-	cli := parseClientFlags(fs, args)
+	cli := buildClient(g, fs, args)
 	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "tsnet.auth"})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tsnet auth failed: %v\n", err)
@@ -100,9 +136,9 @@ func tsnetAuth(args []string) {
 	printResponse(resp)
 }
 
-func runtimeStatus(args []string) {
+func runtimeStatus(g globalOpts, args []string) {
 	fs := flag.NewFlagSet("runtime status", flag.ExitOnError)
-	cli := parseClientFlags(fs, args)
+	cli := buildClient(g, fs, args)
 	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "runtime.status"})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "runtime status failed: %v\n", err)
@@ -111,9 +147,9 @@ func runtimeStatus(args []string) {
 	printResponse(resp)
 }
 
-func status(args []string) {
+func status(g globalOpts, args []string) {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
-	cli := parseClientFlags(fs, args)
+	cli := buildClient(g, fs, args)
 	resp, err := cli.send(ctx(), entity.CommandRequest{Method: "status"})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "status failed: %v\n", err)
@@ -126,9 +162,13 @@ type ipcClient struct {
 	socketPath string
 }
 
-func parseClientFlags(fs *flag.FlagSet, args []string) *ipcClient {
-	configPath := fs.String("config", "files/config/app.yaml", "Path to config file")
-	socketOverride := fs.String("socket-path", "", "Override IPC socket path")
+// buildClient parses command-specific flags and resolves the IPC socket path.
+func buildClient(g globalOpts, fs *flag.FlagSet, args []string) *ipcClient {
+	// Re-add the global flags to each subcommand flag set so they can appear
+	// after the subcommand as well (e.g. "login --config ... --email ...").
+	configPath := fs.String("config", g.configPath, "Path to config file")
+	socketOverride := fs.String("socket-path", g.socketOverride, "Override IPC socket path")
+
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "flag parse error: %v\n", err)
 		os.Exit(1)
