@@ -47,20 +47,25 @@ install:
 docker-build:
 	docker build -t homelytics-agent:latest .
 
+# Optional local config override path (mounted read-only if it exists).
+LOCAL_CONFIG := $(CURDIR)/files/config/app.local.yaml
+LOCAL_CONFIG_MOUNT := $(if $(wildcard $(LOCAL_CONFIG)),-v "$(LOCAL_CONFIG):/opt/homelytics/etc/app.local.yaml:ro",)
+
 # Run the daemon container in the foreground (mounts a local socket directory)
 docker-run:
 	mkdir -p var/run
+	chmod 777 var/run
 	docker run --rm \
 		--name homelytics-agent \
-		-v "$$(PWD)/var/run:/opt/homelytics/run" \
-		-v "$$(PWD)/files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro" \
+		-v "$(CURDIR)/var/run:/opt/homelytics/run" \
+		$(LOCAL_CONFIG_MOUNT) \
 		homelytics-agent:latest
 
 # Run a one-off CLI command against a running container
 docker-cli:
 	docker run --rm \
-		-v "$$(PWD)/var/run:/opt/homelytics/run" \
-		-v "$$(PWD)/files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro" \
+		-v "$(CURDIR)/var/run:/opt/homelytics/run" \
+		$(LOCAL_CONFIG_MOUNT) \
 		homelytics-agent:latest \
 		homelytics-agent $(ARGS)
 
@@ -68,9 +73,10 @@ docker-cli:
 docker-test:
 	make docker-build
 	mkdir -p var/run
+	chmod 777 var/run
 	docker run --rm \
-		-v "$$(PWD)/var/run:/opt/homelytics/run" \
-		-v "$$(PWD)/files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro" \
+		-v "$(CURDIR)/var/run:/opt/homelytics/run" \
+		$(LOCAL_CONFIG_MOUNT) \
 		homelytics-agent:latest \
 		sh -c "homelytics-daemon --config /opt/homelytics/etc/config.yaml & sleep 2; homelytics-agent login --email merchant@example.com --password password; homelytics-agent tsnet auth; homelytics-agent status"
 
