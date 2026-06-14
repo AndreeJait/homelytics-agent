@@ -65,9 +65,10 @@ docker-run:
 docker-cli:
 	docker run --rm \
 		-v "$(CURDIR)/var/run:/opt/homelytics/run" \
+		-v "$(CURDIR)/files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro" \
 		$(LOCAL_CONFIG_MOUNT) \
 		homelytics-agent:latest \
-		homelytics-agent $(ARGS)
+		homelytics-agent --config /opt/homelytics/etc/config.yaml $(ARGS)
 
 # Build image and run a quick login/status test in a single container
 docker-test:
@@ -76,9 +77,10 @@ docker-test:
 	chmod 777 var/run
 	docker run --rm \
 		-v "$(CURDIR)/var/run:/opt/homelytics/run" \
+		-v "$(CURDIR)/files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro" \
 		$(LOCAL_CONFIG_MOUNT) \
 		homelytics-agent:latest \
-		sh -c "homelytics-daemon --config /opt/homelytics/etc/config.yaml & sleep 2; homelytics-agent login --email merchant@example.com --password password; homelytics-agent tsnet auth; homelytics-agent status"
+		sh -c "homelytics-daemon --config /opt/homelytics/etc/config.yaml & sleep 2; homelytics-agent --config /opt/homelytics/etc/config.yaml login --email merchant@example.com --password password; homelytics-agent --config /opt/homelytics/etc/config.yaml tsnet auth; homelytics-agent --config /opt/homelytics/etc/config.yaml status"
 
 # Create a new migration: make migrate-new name=create_users_table
 migrate-new:
