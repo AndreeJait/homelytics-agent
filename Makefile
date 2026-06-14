@@ -45,7 +45,7 @@ install:
 
 # Build the Docker image
 docker-build:
-	docker build -t homelytics-agent:latest .
+	docker build --no-cache -t homelytics-agent:latest .
 
 # Optional local config override path (mounted read-only if it exists).
 LOCAL_CONFIG := $(CURDIR)/files/config/app.local.yaml
