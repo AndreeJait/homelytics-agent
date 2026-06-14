@@ -26,7 +26,8 @@ WORKDIR /opt/homelytics
 RUN apk add --no-cache containerd runc ca-certificates curl iptables ip6tables
 
 # Create the dedicated system user and required directories.
-RUN adduser -S -D -H -h /opt/homelytics -s /sbin/nologin homelytics \
+# Alpine busybox adduser: -S = system, -D = no password, -H = no home directory.
+RUN adduser -S -D -H -h /opt/homelytics homelytics \
     && mkdir -p /opt/homelytics/run /opt/homelytics/etc /opt/homelytics/log /opt/homelytics/lib/containerd \
     && chown -R homelytics:homelytics /opt/homelytics
 
@@ -34,6 +35,9 @@ RUN adduser -S -D -H -h /opt/homelytics -s /sbin/nologin homelytics \
 COPY --from=builder --chown=homelytics:homelytics /build/bin/homelytics-daemon /usr/local/bin/homelytics-daemon
 COPY --from=builder --chown=homelytics:homelytics /build/bin/homelytics-agent /usr/local/bin/homelytics-agent
 COPY --from=builder --chown=homelytics:homelytics /build/files/config/app.yaml /opt/homelytics/etc/config.yaml
+
+# Optional local override file. The daemon will merge it on top of app.yaml.
+COPY --from=builder --chown=homelytics:homelytics /build/files/config/app.local.yaml /opt/homelytics/etc/app.local.yaml 2>/dev/null || true
 
 # Socket directory is world-writable so the CLI can reach it when mounted.
 RUN chmod 0777 /opt/homelytics/run

@@ -165,6 +165,11 @@ export IPC_SOCKET_PATH=$PWD/var/run/ipc.sock
 # Build the image
 make docker-build
 
+# Optional: create a local override file
+# (the example below uses a local socket path so the CLI can reach it easily)
+cp files/config/app.local.yaml.example files/config/app.local.yaml
+# Then edit files/config/app.local.yaml as needed.
+
 # Run the daemon container
 make docker-run
 
@@ -177,7 +182,7 @@ make docker-cli ARGS="status"
 make docker-test
 ```
 
-The Dockerfile uses an Alpine runtime stage with containerd and runc installed. The daemon runs as a `homelytics` system user; `/opt/homelytics/run` is mounted from `./var/run` so the host CLI (or another container) can reach the IPC socket.
+The Dockerfile uses an Alpine runtime stage with containerd and runc installed. The daemon runs as a `homelytics` system user; `/opt/homelytics/run` is mounted from `./var/run` so the host CLI (or another container) can reach the IPC socket. If `files/config/app.local.yaml` exists, it is mounted into the container as `/opt/homelytics/etc/app.local.yaml` and merged on top of the base config.
 
 ### Install on a target machine
 

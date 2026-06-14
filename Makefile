@@ -53,12 +53,14 @@ docker-run:
 	docker run --rm \
 		--name homelytics-agent \
 		-v "$$(PWD)/var/run:/opt/homelytics/run" \
+		-v "$$(PWD)/files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro" \
 		homelytics-agent:latest
 
 # Run a one-off CLI command against a running container
 docker-cli:
 	docker run --rm \
 		-v "$$(PWD)/var/run:/opt/homelytics/run" \
+		-v "$$(PWD)/files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro" \
 		homelytics-agent:latest \
 		homelytics-agent $(ARGS)
 
@@ -68,6 +70,7 @@ docker-test:
 	mkdir -p var/run
 	docker run --rm \
 		-v "$$(PWD)/var/run:/opt/homelytics/run" \
+		-v "$$(PWD)/files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro" \
 		homelytics-agent:latest \
 		sh -c "homelytics-daemon --config /opt/homelytics/etc/config.yaml & sleep 2; homelytics-agent login --email merchant@example.com --password password; homelytics-agent tsnet auth; homelytics-agent status"
 
