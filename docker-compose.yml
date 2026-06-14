@@ -15,6 +15,7 @@ services:
       - TAILSCALE_API_KEY=${TAILSCALE_API_KEY}
     volumes:
       - ./var/run:/opt/homelytics/run
+      - tsnet-state:/opt/homelytics/lib/tsnet
       - ./files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro
       - ./files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
@@ -38,3 +39,4 @@ services:
 volumes:
   containerd-data:
   containerd-run:
+  tsnet-state:

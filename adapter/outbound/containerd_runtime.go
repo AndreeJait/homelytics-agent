@@ -107,6 +107,7 @@ func (r *containerdRuntime) CreateContainer(ctx context.Context, req entity.RunW
 
 	specOpts := []oci.SpecOpts{
 		oci.WithImageConfig(image),
+		oci.WithCgroup(""),
 	}
 
 	if req.HostNetwork {

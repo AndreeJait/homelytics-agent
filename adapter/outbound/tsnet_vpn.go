@@ -73,11 +73,7 @@ func (v *tsnetVPN) buildServer() *tsnet.Server {
 }
 
 func defaultTSNetStateDir(hostname string) string {
-	base, _ := os.UserConfigDir()
-	if base == "" {
-		base = "/tmp"
-	}
-	return filepath.Join(base, "homelytics-agent", "tsnet", hostname)
+	return filepath.Join("/opt", "homelytics", "lib", "tsnet", hostname)
 }
 
 func (v *tsnetVPN) Status(ctx context.Context) (bool, error) {

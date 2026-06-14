@@ -15,6 +15,7 @@ type AuthSession struct {
 	TokenType    string    `json:"token_type"`
 	ExpiresIn    int       `json:"expires_in"`
 	ExpiresAt    time.Time `json:"expires_at"`
+	MerchantID   string    `json:"merchant_id"`
 }
 
 // RefreshTokenRequest is sent to refresh an access token.
