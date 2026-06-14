@@ -37,8 +37,7 @@ COPY --from=builder --chown=homelytics:homelytics /build/bin/homelytics-daemon /
 COPY --from=builder --chown=homelytics:homelytics /build/bin/homelytics-agent /usr/local/bin/homelytics-agent
 COPY --from=builder --chown=homelytics:homelytics /build/files/config/app.yaml /opt/homelytics/etc/config.yaml
 
-# Optional local override file. The daemon will merge it on top of app.yaml.
-COPY --from=builder --chown=homelytics:homelytics /build/files/config/app.local.yaml /opt/homelytics/etc/app.local.yaml 2>/dev/null || true
+# Optional local override file is mounted at runtime, not baked into the image.
 
 # Socket directory is world-writable so the CLI can reach it when mounted.
 RUN chmod 0777 /opt/homelytics/run
