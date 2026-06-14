@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: homelytics-agent:latest
+    container_name: homelytics-agent
+    command: ["--config", "/opt/homelytics/etc/config.yaml"]
+    volumes:
+      - ./var/run:/opt/homelytics/run
+      - ./files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro
+      - ./files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro
+    restart: unless-stopped
+
+  cli:
+    image: homelytics-agent:latest
+    profiles:
+      - cli
+    depends_on:
+      - daemon
+    volumes:
+      - ./var/run:/opt/homelytics/run
+      - ./files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro
+      - ./files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro
+    command: ["--config", "/opt/homelytics/etc/config.yaml", "status"]

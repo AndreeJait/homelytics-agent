@@ -1,4 +1,4 @@
-.PHONY: build build-daemon build-cli run-daemon run-cli test tidy vet install ensure-tools migrate-new migrate-up migrate-down migrate-fresh docker-build docker-run docker-test
+.PHONY: build build-daemon build-cli run-daemon run-cli test tidy vet install ensure-tools migrate-new migrate-up migrate-down migrate-fresh docker-build docker-run docker-test docker-up docker-down docker-cli-compose
 
 # Auto-install required CLI tools
 ensure-tools:
@@ -45,42 +45,34 @@ install:
 
 # Build the Docker image
 docker-build:
-	docker build --no-cache -t homelytics-agent:latest .
+	docker compose build --no-cache
 
-# Optional local config override path (mounted read-only if it exists).
-LOCAL_CONFIG := $(CURDIR)/files/config/app.local.yaml
-LOCAL_CONFIG_MOUNT := $(if $(wildcard $(LOCAL_CONFIG)),-v "$(LOCAL_CONFIG):/opt/homelytics/etc/app.local.yaml:ro",)
-
-# Run the daemon container in the foreground (mounts a local socket directory)
-docker-run:
+# Start the daemon container via docker-compose
+docker-up:
 	mkdir -p var/run
 	chmod 777 var/run
-	docker run --rm \
-		--name homelytics-agent \
-		-v "$(CURDIR)/var/run:/opt/homelytics/run" \
-		$(LOCAL_CONFIG_MOUNT) \
-		homelytics-agent:latest
+	docker compose up -d daemon
 
-# Run a one-off CLI command against a running container
-docker-cli:
-	docker run --rm \
-		-v "$(CURDIR)/var/run:/opt/homelytics/run" \
-		-v "$(CURDIR)/files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro" \
-		$(LOCAL_CONFIG_MOUNT) \
-		homelytics-agent:latest \
+# Stop the daemon container
+docker-down:
+	docker compose down
+
+# Run a one-off CLI command against the running daemon via docker-compose
+docker-cli-compose:
+	docker compose run --rm cli \
 		homelytics-agent --config /opt/homelytics/etc/config.yaml $(ARGS)
 
 # Build image and run a quick login/status test in a single container
 docker-test:
 	make docker-build
-	mkdir -p var/run
-	chmod 777 var/run
-	docker run --rm \
-		-v "$(CURDIR)/var/run:/opt/homelytics/run" \
-		-v "$(CURDIR)/files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro" \
-		$(LOCAL_CONFIG_MOUNT) \
-		homelytics-agent:latest \
-		sh -c "homelytics-daemon --config /opt/homelytics/etc/config.yaml & sleep 2; homelytics-agent --config /opt/homelytics/etc/config.yaml login --email merchant@example.com --password password; homelytics-agent --config /opt/homelytics/etc/config.yaml tsnet auth; homelytics-agent --config /opt/homelytics/etc/config.yaml status"
+	make docker-up
+	sleep 2
+	docker compose run --rm cli \
+		homelytics-agent --config /opt/homelytics/etc/config.yaml login --email merchant@example.com --password password
+	docker compose run --rm cli \
+		homelytics-agent --config /opt/homelytics/etc/config.yaml tsnet auth
+	docker compose run --rm cli \
+		homelytics-agent --config /opt/homelytics/etc/config.yaml status
 
 # Create a new migration: make migrate-new name=create_users_table
 migrate-new:
