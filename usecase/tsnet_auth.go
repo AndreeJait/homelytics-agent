@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 
+	"github.com/AndreeJait/go-utility/v2/logw"
 	"github.com/AndreeJait/go-utility/v2/statusw"
 	"github.com/AndreeJait/homelytics-agent/domain/entity"
 	portInbound "github.com/AndreeJait/homelytics-agent/port/inbound/tsnet"
@@ -37,8 +38,10 @@ func (u *tsnetAuthUseCase) GetAuthKey(ctx context.Context) (*entity.TSNetAuthKey
 	}
 
 	if err := u.vpn.Start(ctx, key.AuthKey); err != nil {
+		logw.CtxErrorf(ctx, "tsnet start failed: %v", err)
 		return nil, err
 	}
 
+	logw.CtxInfof(ctx, "tsnet started with auth key")
 	return key, nil
 }

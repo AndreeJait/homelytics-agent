@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/AndreeJait/go-utility/v2/logw"
 	"github.com/AndreeJait/homelytics-agent/config"
@@ -30,10 +31,32 @@ func (l *TSNetCommandListener) Start(ctx context.Context) {
 		return
 	}
 
+	// Start the listener in a goroutine and retry until tsnet is available.
+	go l.serve(ctx)
+}
+
+func (l *TSNetCommandListener) serve(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := l.tryServe(ctx); err != nil {
+				logw.CtxWarningf(ctx, "tsnet listener: %v", err)
+				continue
+			}
+			return
+		}
+	}
+}
+
+func (l *TSNetCommandListener) tryServe(ctx context.Context) error {
 	listener, err := l.vpn.Listen("tcp", l.cfg.TSNet.CommandListenerAddr)
 	if err != nil {
-		logw.CtxWarningf(ctx, "tsnet listener: %v", err)
-		return
+		return err
 	}
 
 	mux := http.NewServeMux()
@@ -57,6 +80,8 @@ func (l *TSNetCommandListener) Start(ctx context.Context) {
 		_ = server.Close()
 		_ = listener.Close()
 	}()
+
+	return nil
 }
 
 func (l *TSNetCommandListener) handleCommand(w http.ResponseWriter, r *http.Request) {

@@ -3,10 +3,12 @@ package outbound
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/AndreeJait/go-utility/v2/containerdw"
 	containerd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/AndreeJait/homelytics-agent/config"
 	"github.com/AndreeJait/homelytics-agent/domain/entity"
@@ -15,8 +17,9 @@ import (
 )
 
 type containerdRuntime struct {
-	wrapper containerdw.Containerd
-	raw     *containerd.Client
+	wrapper   containerdw.Containerd
+	raw       *containerd.Client
+	namespace string
 }
 
 // NewContainerdRuntime wraps containerdw and a raw containerd client into the domain port.
@@ -40,7 +43,12 @@ func NewContainerdRuntime(cfg *config.AppConfig) (portOutbound.ContainerRuntime,
 		_ = wrapper.Close()
 		return raw.Close()
 	}
-	return &containerdRuntime{wrapper: wrapper, raw: raw}, cleanup, nil
+	return &containerdRuntime{wrapper: wrapper, raw: raw, namespace: cfg.Containerd.Namespace}, cleanup, nil
+}
+
+
+func (r *containerdRuntime) withNamespace(ctx context.Context) context.Context {
+	return namespaces.WithNamespace(ctx, r.namespace)
 }
 
 func (r *containerdRuntime) Status(ctx context.Context) (*entity.RuntimeStatus, error) {
@@ -61,17 +69,33 @@ func (r *containerdRuntime) PullImage(ctx context.Context, ref string) error {
 	return err
 }
 
+func normalizeImageRef(ref string) string {
+	if strings.Contains(ref, "/") && strings.Contains(ref, ":") {
+		return ref
+	}
+	if !strings.Contains(ref, "/") {
+		ref = "library/" + ref
+	}
+	if !strings.Contains(ref, ":") {
+		ref = ref + ":latest"
+	}
+	return "docker.io/" + ref
+}
+
 func (r *containerdRuntime) CreateContainer(ctx context.Context, req entity.RunWorkloadRequest) (string, error) {
 	id := req.ID
 	if id == "" {
 		id = generateContainerID()
 	}
 
-	if err := r.PullImage(ctx, req.Image); err != nil {
+	imageRef := normalizeImageRef(req.Image)
+	ctx = r.withNamespace(ctx)
+
+	if err := r.PullImage(ctx, imageRef); err != nil {
 		return "", fmt.Errorf("pull image %q: %w", req.Image, err)
 	}
 
-	image, err := r.raw.GetImage(ctx, req.Image)
+	image, err := r.raw.GetImage(ctx, imageRef)
 	if err != nil {
 		return "", fmt.Errorf("get image %q: %w", req.Image, err)
 	}
