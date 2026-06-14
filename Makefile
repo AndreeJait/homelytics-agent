@@ -59,7 +59,7 @@ docker-down:
 
 # Run a one-off CLI command against the running daemon via docker-compose
 docker-cli-compose:
-	docker compose run --rm cli \
+	docker compose run --rm --entrypoint "" cli \
 		homelytics-agent --config /opt/homelytics/etc/config.yaml $(ARGS)
 
 # Build image and run a quick login/status test in a single container
@@ -67,11 +67,11 @@ docker-test:
 	make docker-build
 	make docker-up
 	sleep 2
-	docker compose run --rm cli \
+	docker compose run --rm --entrypoint "" cli \
 		homelytics-agent --config /opt/homelytics/etc/config.yaml login --email merchant@example.com --password password
-	docker compose run --rm cli \
+	docker compose run --rm --entrypoint "" cli \
 		homelytics-agent --config /opt/homelytics/etc/config.yaml tsnet auth
-	docker compose run --rm cli \
+	docker compose run --rm --entrypoint "" cli \
 		homelytics-agent --config /opt/homelytics/etc/config.yaml status
 
 # Create a new migration: make migrate-new name=create_users_table

@@ -20,8 +20,9 @@ services:
       - cli
     depends_on:
       - daemon
+    entrypoint: [""]
+    command: ["homelytics-agent", "--config", "/opt/homelytics/etc/config.yaml", "status"]
     volumes:
       - ./var/run:/opt/homelytics/run
       - ./files/config/app.yaml:/opt/homelytics/etc/config.yaml:ro
       - ./files/config/app.local.yaml:/opt/homelytics/etc/app.local.yaml:ro
-    command: ["--config", "/opt/homelytics/etc/config.yaml", "status"]
