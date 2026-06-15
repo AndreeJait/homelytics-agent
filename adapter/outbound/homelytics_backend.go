@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/AndreeJait/go-utility/v2/statusw"
@@ -42,7 +43,7 @@ func (b *mockHomelyticsBackend) Login(_ context.Context, req entity.LoginRequest
 		RefreshToken: mockToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    900,
-		MerchantID:   "merchant-12345",
+		MerchantID:   mockMerchantID(mockEmail),
 		ExpiresAt:    time.Now().UTC().Add(24 * time.Hour),
 	}, nil
 }
@@ -134,13 +135,33 @@ func (b *mockHomelyticsBackend) RefreshToken(_ context.Context, req entity.Refre
 		RefreshToken: mockToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    900,
-		MerchantID:   "merchant-12345",
+		MerchantID:   mockMerchantID(mockEmail),
 		ExpiresAt:    time.Now().UTC().Add(24 * time.Hour),
 	}, nil
 }
 
 func (b *mockHomelyticsBackend) Heartbeat(_ context.Context, _ string, _ entity.AgentHeartbeat) (*entity.HeartbeatResponse, error) {
 	return &entity.HeartbeatResponse{Commands: []entity.Command{}}, nil
+}
+
+func mockMerchantID(email string) string {
+	if id := os.Getenv("HOMELYTICS_MOCK_MERCHANT_ID"); id != "" {
+		return id
+	}
+	// Deterministic, safe merchant ID derived from the email local-part.
+	local := email
+	if at := strings.Index(email, "@"); at >= 0 {
+		local = email[:at]
+	}
+	return "merchant-" + strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			return r
+		}
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		return '-'
+	}, local)
 }
 
 type httpHomelyticsBackend struct {

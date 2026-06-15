@@ -43,7 +43,7 @@ func (u *tsnetAuthUseCase) GetAuthKey(ctx context.Context) (*entity.TSNetAuthKey
 		return nil, err
 	}
 
-	if err := u.vpn.Start(ctx, key.AuthKey); err != nil {
+	if err := u.vpn.Start(ctx, key.AuthKey, hostname); err != nil {
 		logw.CtxErrorf(ctx, "tsnet start failed: %v", err)
 		return nil, err
 	}

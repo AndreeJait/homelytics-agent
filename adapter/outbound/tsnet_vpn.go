@@ -28,7 +28,7 @@ func NewTSNetVPN(cfg *config.AppConfig) (portOutbound.VPN, func() error, error) 
 	return &tsnetVPN{cfg: cfg}, cleanup, nil
 }
 
-func (v *tsnetVPN) Start(ctx context.Context, authKey string) error {
+func (v *tsnetVPN) Start(ctx context.Context, authKey, hostname string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -37,7 +37,7 @@ func (v *tsnetVPN) Start(ctx context.Context, authKey string) error {
 	}
 
 	v.authKey = authKey
-	v.server = v.buildServer()
+	v.server = v.buildServer(hostname)
 
 	if err := v.server.Start(); err != nil {
 		return fmt.Errorf("tsnet start: %w", err)
@@ -53,16 +53,16 @@ func (v *tsnetVPN) Start(ctx context.Context, authKey string) error {
 	return nil
 }
 
-func (v *tsnetVPN) buildServer() *tsnet.Server {
+func (v *tsnetVPN) buildServer(hostname string) *tsnet.Server {
 	dir := v.cfg.TSNet.Dir
 	if dir == "" {
-		dir = defaultTSNetStateDir(v.cfg.TSNet.Hostname)
+		dir = defaultTSNetStateDir(hostname)
 	}
 
 	_ = os.MkdirAll(dir, 0o700)
 
 	return &tsnet.Server{
-		Hostname:      v.cfg.TSNet.Hostname,
+		Hostname:      hostname,
 		Dir:           dir,
 		AuthKey:       v.authKey,
 		ControlURL:    v.cfg.TSNet.ControlURL,

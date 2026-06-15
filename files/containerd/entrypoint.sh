@@ -5,11 +5,21 @@ set -e
 mkdir -p /opt/homelytics/run /opt/homelytics/log /opt/homelytics/lib/containerd /run/containerd
 
 # Prepare cgroup v2 hierarchy for nested containers.
+# Move this shell (and therefore containerd + its children) into a delegated
+# cgroup so runc can create per-container cgroups below it.
 CGROUP_ROOT=/sys/fs/cgroup
 if [ -d "$CGROUP_ROOT" ] && [ -f "$CGROUP_ROOT/cgroup.controllers" ]; then
     mkdir -p "$CGROUP_ROOT/homelytics"
-    echo "+cpuset +cpu +io +memory +pids" > "$CGROUP_ROOT/cgroup.subtree_control" 2>/dev/null || true
-    echo "+cpuset +cpu +io +memory +pids" > "$CGROUP_ROOT/homelytics/cgroup.subtree_control" 2>/dev/null || true
+    # Enable controllers in the root so the homelytics cgroup can use them.
+    for ctrl in cpuset cpu io memory pids; do
+        echo "+$ctrl" > "$CGROUP_ROOT/cgroup.subtree_control" 2>/dev/null || true
+    done
+    # Enable controllers for the homelytics subtree.
+    for ctrl in cpuset cpu io memory pids; do
+        echo "+$ctrl" > "$CGROUP_ROOT/homelytics/cgroup.subtree_control" 2>/dev/null || true
+    done
+    # Move the current shell into the homelytics cgroup.
+    echo $$ > "$CGROUP_ROOT/homelytics/cgroup.procs" 2>/dev/null || true
 fi
 
 # Start containerd in the background.
